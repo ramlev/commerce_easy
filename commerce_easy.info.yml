@@ -1,0 +1,9 @@
+name: Commerce Easy
+type: module
+description: Pay with Nets Easy
+package: Commerce
+core: 8.x
+core_version_requirement: ^8 || ^9
+dependencies:
+  - commerce
+  - commerce_payment
