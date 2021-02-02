@@ -9,4 +9,35 @@
  * Implements hook_install().
  */
 function commerce_easy_install() {
+  $module_handler = \Drupal::moduleHandler();
+  if ($module_handler->moduleExists('commerce_dibs')) {
+    $uninstall = TRUE;
+    /** @var \Drupal\commerce_payment\Entity\PaymentGatewayInterface $payment_gateway */
+    foreach (\Drupal::entityTypeManager()->getStorage('commerce_payment_gateway')->loadMultiple() as $payment_gateway) {
+      switch ($payment_gateway->getPluginId()) {
+        case 'commerce_dibs_easy_hosted_payment_page':
+          // Migrate the payment gateway to new plugin.
+          $configuration = $payment_gateway->getPluginConfiguration();
+          $payment_gateway->setPluginId('commerce_easy_hosted_payment_page');
+          $payment_gateway->setPluginConfiguration($configuration);
+          $payment_gateway->save();
+          break;
+
+        case 'commerce_dibs_flexwin_offsite_redirect':
+        case 'commerce_dibs_offsite_redirect':
+          $uninstall = FALSE;
+          break;
+
+        default:
+          // Unrelated.
+          break;
+      }
+    }
+
+    if ($uninstall === TRUE) {
+      /** @var \Drupal\Core\Extension\ModuleInstallerInterface $module_installer */
+      $module_installer = \Drupal::service('module_installer');
+      $module_installer->uninstall(['commerce_dibs']);
+    }
+  }
 }

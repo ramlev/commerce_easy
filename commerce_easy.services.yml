@@ -1,0 +1,12 @@
+services:
+  commerce_easy.order_builder:
+    class: Drupal\commerce_easy\OrderBuilder
+    arguments: ['@event_dispatcher', '@commerce_price.rounder']
+
+  commerce_easy.api_helper:
+    class: Drupal\commerce_easy\ApiHelper
+    arguments: ['@http_client']
+
+  logger.channel.commerce_easy:
+    parent: logger.channel_base
+    arguments: [ 'commerce_easy' ]
