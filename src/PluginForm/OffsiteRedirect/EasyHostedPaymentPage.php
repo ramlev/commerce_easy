@@ -27,6 +27,7 @@ class EasyHostedPaymentPage extends PaymentOffsiteForm {
     $order_builder = \Drupal::service('commerce_easy.order_builder');
     $easy_order = $order_builder->buildOrder($order);
     $easy_order['checkout']['returnUrl'] = $form['#return_url'];
+    $easy_order['checkout']['cancelUrl'] = $form['#cancel_url'];
     $easy_order['checkout']['integrationType'] = 'HostedPaymentPage';
     $easy_order['checkout']['merchantHandlesConsumerData'] = TRUE;
 
