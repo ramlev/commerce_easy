@@ -41,10 +41,17 @@ class EasyHostedPaymentPage extends PaymentOffsiteForm {
 
     if (!isset($payment_gateway_config['enable_notification_webhook']) || $payment_gateway_config['enable_notification_webhook'] === TRUE) {
       $order->setData('easy_authorization', uniqid());
+      $notifyUrl = $payment_gateway->getPlugin()->getNotifyUrl()->mergeOptions(['query' => ['order' => $order->id()]]);
       $easy_order['notifications']['webhooks'][] = [
-        'eventName' => 'payment.checkout.completed',
-        'url' => Url::fromRoute('commerce_payment.notify',
-          ['commerce_payment_gateway' => $payment_gateway->id()])
+        'eventName' => 'payment.reservation.created.v2',
+        'url' => $notifyUrl
+          ->setAbsolute(TRUE)
+          ->toString(),
+        'authorization' => $order->getData('easy_authorization'),
+      ];
+      $easy_order['notifications']['webhooks'][] = [
+        'eventName' => 'payment.charge.created.v2',
+        'url' => $notifyUrl
           ->setAbsolute(TRUE)
           ->toString(),
         'authorization' => $order->getData('easy_authorization'),

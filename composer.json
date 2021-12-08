@@ -3,7 +3,7 @@
     "type": "drupal-module",
     "description": "Provides an Easy payment gateway integration.",
     "require": {
-        "drupal/commerce": "~2.9",
+        "drupal/commerce": "~2.25",
         "drupal/commerce_payment_extra": "^1.0@beta"
     },
     "require-dev": {

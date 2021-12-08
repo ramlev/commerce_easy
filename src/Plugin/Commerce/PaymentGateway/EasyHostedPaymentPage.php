@@ -98,7 +98,7 @@ class EasyHostedPaymentPage extends OffsitePaymentGatewayBase implements Support
    * Sets the API helper.
    *
    * @param \Drupal\commerce_easy\ApiHelperInterface $apiHelper
-   *   The API helper
+   *   The API helper.
    *
    * @return $this
    */
@@ -181,16 +181,25 @@ class EasyHostedPaymentPage extends OffsitePaymentGatewayBase implements Support
    * {@inheritdoc}
    */
   public function onNotify(Request $request) {
-    $easy_order = Json::decode($request->getContent());
-    if (empty($easy_order['data']['paymentId'])) {
-      $this->logger->error('Missing payment ID', ['@context' => $easy_order]);
+    $webhook = Json::decode($request->getContent());
+    if (empty($webhook['data']['paymentId'])) {
+      $this->logger->error('Missing payment ID', ['@context' => $webhook]);
       return new Response('Payment ID is missing', Response::HTTP_FORBIDDEN);
     }
-    $remoteId = $easy_order['data']['paymentId'];
-    $paymentGatewayId = isset($this->parentEntity) ? $this->parentEntity->id() : $this->entityId;
+    $remoteId = $webhook['data']['paymentId'];
+    if (empty($webhook['event'])) {
+      $this->logger->error('Missing event type', ['@context' => $webhook]);
+      return new Response('Event type is missing', Response::HTTP_FORBIDDEN);
+    }
+    $paymentGatewayId = $this->parentEntity->id();
     $lockId = $paymentGatewayId . '__' . $remoteId;
     /** @var \Drupal\commerce_payment\PaymentStorageInterface $paymentStorage */
     $paymentStorage = $this->entityTypeManager->getStorage('commerce_payment');
+
+    if (!$order_id = $request->query->get('order')) {
+      $this->logger->error('Missing order ID context @context', ['@context' => $request->getUri()]);
+      return new Response('Order ID is missing', Response::HTTP_FORBIDDEN);
+    }
 
     // Keep checking if lock could be acquired for 5 seconds, then start over.
     while ($this->lock->wait($lockId, 5) || !$this->lock->acquire($lockId)) {
@@ -200,9 +209,9 @@ class EasyHostedPaymentPage extends OffsitePaymentGatewayBase implements Support
     }
 
     /** @var \Drupal\commerce_order\Entity\OrderInterface $order */
-    if (!$order = $this->entityTypeManager->getStorage('commerce_order')->load($easy_order['data']['order']['reference'])) {
+    if (!$order = $this->entityTypeManager->getStorage('commerce_order')->load($order_id)) {
       $this->lock->release($lockId);
-      $this->logger->error('Order reference is incorrect; could not locate order @order', ['@order' => $easy_order['data']['order']['reference']]);
+      $this->logger->error('Order reference is incorrect; could not locate order @order', ['@order' => $order_id]);
       return new Response('Order reference is incorrect', Response::HTTP_FORBIDDEN);
     }
 
@@ -211,34 +220,72 @@ class EasyHostedPaymentPage extends OffsitePaymentGatewayBase implements Support
     $expectedAuthorization = $order->getData('easy_authorization');
     if ($expectedAuthorization !== $authorization) {
       $this->lock->release($lockId);
-      $this->logger->error('Authorization header mismatch for order @order: expected @expected provided @provided', ['@order' => $order->id(), '@expected' => $expectedAuthorization, '@provided' => $authorization]);
+      $this->logger->error('Authorization header mismatch for order @order: expected @expected provided @provided', [
+        '@order' => $order->id(),
+        '@expected' => $expectedAuthorization,
+        '@provided' => $authorization,
+      ]);
       return new Response('Authorization header mismatch', Response::HTTP_FORBIDDEN);
     }
 
     // Stop if payment already exists.
-    if ($paymentStorage->loadByRemoteId($remoteId)) {
-      $this->lock->release($lockId);
-      $this->logger->notice('Payment @remote_id already exists, skipping.', ['@remote_id' => $remoteId]);
-      return new Response('OK', Response::HTTP_OK);
+    $payment = $paymentStorage->loadByRemoteId($remoteId);
+
+    switch ($webhook['event']) {
+      case 'payment.reservation.created.v2':
+        if ($payment instanceof PaymentInterface) {
+          $this->lock->release($lockId);
+          $this->logger->notice('Payment @remote_id already exists, skipping.',
+            ['@remote_id' => $remoteId]);
+          return new Response('OK', Response::HTTP_OK);
+        }
+        $state = 'authorization';
+        $time = $webhook['timestamp'] ? strtotime($webhook['timestamp']) : time();
+        $amount = $this->minorUnitsConverter->fromMinorUnits($webhook['data']['amount']['amount'], $webhook['data']['amount']['currency']);
+        break;
+
+      case 'payment.charge.created.v2':
+        if ($payment instanceof PaymentInterface && $payment->isCompleted()) {
+          $this->lock->release($lockId);
+          $this->logger->notice('Payment @remote_id exists, and it has already been completed, skipping.',
+            ['@remote_id' => $remoteId]);
+          return new Response('OK', Response::HTTP_OK);
+        }
+        $state = 'completed';
+        $time = $webhook['timestamp'] ? strtotime($webhook['timestamp']) : time();
+        $amount = $this->minorUnitsConverter->fromMinorUnits($webhook['data']['amount']['amount'], $webhook['data']['amount']['currency']);
+        break;
+
+      default:
+        $this->lock->release($lockId);
+        $this->logger->error('Unsupported event @event',
+          ['@event' => $webhook['event']]);
+        return new Response(sprintf('Unsupported event %s', $webhook['event']), Response::HTTP_FORBIDDEN);
+
     }
 
-    $state = 'authorization';
-    $amount = (new Price($easy_order['data']['order']['amount']['amount'], $easy_order['data']['order']['amount']['currency']))->divide(100);
-
-    // The payment was directly captured.
-    if (isset($easy_payment['payment']['summary']['chargedAmount'])) {
-      $state = 'completed';
-      $amount = (new Price($easy_payment['payment']['summary']['chargedAmount'], $order->getTotalPrice()->getCurrencyCode()))->divide(100);
+    if ($payment instanceof PaymentInterface) {
+      $payment->setAmount($amount);
+      $payment->setState($state);
     }
-
-    $payment = $paymentStorage->create([
-      'state' => $state,
-      'amount' => $amount,
-      'payment_gateway' => $paymentGatewayId,
-      'order_id' => $order->id(),
-      'remote_state' => 'OK',
-      'remote_id' => $remoteId,
-    ]);
+    else {
+      /** @var \Drupal\commerce_payment\Entity\PaymentInterface $payment */
+      $payment = $paymentStorage->create([
+        'state' => $state,
+        'amount' => $amount,
+        'payment_gateway' => $paymentGatewayId,
+        'order_id' => $order->id(),
+        'remote_state' => 'OK',
+        'remote_id' => $remoteId,
+      ]);
+    }
+    if ($state === 'authorization') {
+      $payment->setAuthorizedTime($time);
+    }
+    elseif ($state === 'completed') {
+      $payment->setAuthorizedTime($time);
+      $payment->setCompletedTime($time);
+    }
     $payment->save();
     $this->lock->release($lockId);
     return new Response('OK', Response::HTTP_OK);
@@ -249,7 +296,7 @@ class EasyHostedPaymentPage extends OffsitePaymentGatewayBase implements Support
    */
   public function onReturn(OrderInterface $order, Request $request) {
     $remoteId = $request->query->get('paymentid');
-    $paymentGatewayId = isset($this->parentEntity) ? $this->parentEntity->id() : $this->entityId;
+    $paymentGatewayId = $this->parentEntity->id();
     $lockId = $paymentGatewayId . '__' . $remoteId;
 
     // Keep checking if lock could be acquired for 5 seconds, then start over.
@@ -264,6 +311,7 @@ class EasyHostedPaymentPage extends OffsitePaymentGatewayBase implements Support
     $easy_payment = $this->apiHelper->getPayment($remoteId);
     if (!isset($easy_payment['payment']['summary']['reservedAmount'])) {
       $this->lock->release($lockId);
+      $this->logger->error('Reserved amount property is missing', ['@context' => $easy_payment]);
       throw new PaymentGatewayException('Reserved amount property is missing');
     }
 
@@ -280,15 +328,26 @@ class EasyHostedPaymentPage extends OffsitePaymentGatewayBase implements Support
         $amount = (new Price($easy_payment['payment']['summary']['chargedAmount'], $order->getTotalPrice()->getCurrencyCode()))->divide(100);
       }
 
+      /** @var \Drupal\commerce_payment\Entity\PaymentInterface $payment */
       $payment = $paymentStorage->create([
         'state' => $state,
         'amount' => $amount,
-        'payment_gateway' => $this->entityId,
+        'payment_gateway' => $paymentGatewayId,
         'order_id' => $order->id(),
         'remote_state' => 'OK',
         'remote_id' => $remoteId,
       ]);
+      if ($state === 'authorization') {
+        $payment->setAuthorizedTime(time());
+      }
+      elseif ($state === 'completed') {
+        $payment->setAuthorizedTime(time());
+        $payment->setCompletedTime(time());
+      }
       $payment->save();
+    }
+    else {
+      $this->logger->notice('Payment @remote_id already exists, skipping.', ['@remote_id' => $remoteId]);
     }
 
     $this->lock->release($lockId);
