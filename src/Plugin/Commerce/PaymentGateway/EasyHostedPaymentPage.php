@@ -309,6 +309,14 @@ class EasyHostedPaymentPage extends OffsitePaymentGatewayBase implements Support
     $this->apiHelper->setEnvironment($this->configuration['mode']);
     $this->apiHelper->setSecretKey($this->configuration['secret_key']);
     $easy_payment = $this->apiHelper->getPayment($remoteId);
+
+    // To give justice to payment methods that do not even support authorization
+    // flow (ekhm... Swish) we unify the way the following code is
+    // handled by creating the fallback reservedAmount entry.
+    if (isset($easy_payment['payment']['summary']['chargedAmount']) && !isset($easy_payment['payment']['summary']['reservedAmount'])) {
+      $easy_payment['payment']['summary']['reservedAmount'] = $easy_payment['payment']['summary']['chargedAmount'];
+    }
+
     if (!isset($easy_payment['payment']['summary']['reservedAmount'])) {
       $this->lock->release($lockId);
       $this->logger->error('Reserved amount property is missing', ['@context' => $easy_payment]);
