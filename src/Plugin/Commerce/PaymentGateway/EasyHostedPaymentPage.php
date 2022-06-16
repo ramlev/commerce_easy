@@ -174,6 +174,7 @@ class EasyHostedPaymentPage extends OffsitePaymentGatewayBase implements Support
       $this->configuration['secret_key'] = $values['secret_key'];
       $this->configuration['terms_path'] = $values['terms_path'];
       $this->configuration['langcode'] = $values['langcode'];
+      $this->configuration['enable_notification_webhook'] = $values['enable_notification_webhook'];
     }
   }
 
