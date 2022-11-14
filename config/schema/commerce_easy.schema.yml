@@ -1,0 +1,15 @@
+commerce_payment.commerce_payment_gateway.plugin.commerce_easy_hosted_payment_page:
+  type: commerce_payment_gateway_configuration
+  mapping:
+    secret_key:
+      type: string
+      label: 'Secret key'
+    terms_path:
+      type: string
+      label: 'Path to terms and conditions page'
+    locale:
+      type: string
+      label: 'Language'
+    enable_notification_webhook:
+      type: boolean
+      title: 'Enable notification webhook'
