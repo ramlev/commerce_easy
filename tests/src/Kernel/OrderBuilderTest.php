@@ -34,7 +34,7 @@ class OrderBuilderTest extends OrderKernelTestBase {
   /**
    * {@inheritdoc}
    */
-  public function setUp() {
+  public function setUp(): void {
     parent::setUp();
 
     // This is copy-pasted from commerce_shipping.
@@ -94,9 +94,9 @@ class OrderBuilderTest extends OrderKernelTestBase {
     /** @var \Drupal\commerce_easy\OrderBuilder $builder */
     $builder = $this->container->get('commerce_easy.order_builder');
     $data = $builder->buildOrder($this->order);
-    $this->assertEqual($data["order"]["amount"], '4000');
-    $this->assertEqual($data["order"]["currency"], 'USD');
-    $this->assertEqual($data["order"]["reference"], $this->order->id());
+    $this->assertEquals($data["order"]["amount"], '4000');
+    $this->assertEquals($data["order"]["currency"], 'USD');
+    $this->assertEquals($data["order"]["reference"], $this->order->id());
   }
 
 }

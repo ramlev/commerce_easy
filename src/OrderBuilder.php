@@ -167,7 +167,7 @@ class OrderBuilder {
 
 
     $event = new BuildOrderEvent($order, $easy_order);
-    $this->eventDispatcher->dispatch(EasyEvents::EASY_BUILD_ORDER, $event);
+    $this->eventDispatcher->dispatch($event, EasyEvents::EASY_BUILD_ORDER);
     return $event->getEasyOrder();
   }
 

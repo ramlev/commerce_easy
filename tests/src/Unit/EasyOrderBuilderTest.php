@@ -65,7 +65,7 @@ class EasyOrderBuilderTest extends UnitTestCase {
     $this->assertEquals(440, (int) $item_built["netTotalAmount"]);
     // Now try to json_encode this, as the number should not change.
     $json = json_encode($item_built);
-    $this->assertTrue(strpos($json, '"unitPrice":"440","'));
+    $this->assertNotFalse(strpos($json, '"unitPrice":"440","'));
   }
 
 }

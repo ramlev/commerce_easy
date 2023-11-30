@@ -3,7 +3,7 @@
 namespace Drupal\commerce_easy\Event;
 
 use Drupal\commerce_order\Entity\OrderInterface;
-use Symfony\Component\EventDispatcher\Event;
+use Symfony\Contracts\EventDispatcher\Event;
 
 class BuildOrderEvent extends Event {
 
