@@ -35,7 +35,7 @@ class EasyOrderBuilderTest extends UnitTestCase {
   /**
    * {@inheritdoc}
    */
-  public function setUp() {
+  public function setUp() : void {
     $this->eventDispatcher = $this->createMock(EventDispatcherInterface::class);
     $this->rounder = $this->createMock(RounderInterface::class);
   }
@@ -54,6 +54,8 @@ class EasyOrderBuilderTest extends UnitTestCase {
       ->willReturn(new Price('4.4', 'USD'));
     $item->method('getAdjustments')
       ->willReturn([]);
+    $item->method('id')
+      ->willReturn('12345');
     // @todo: Remove after making the builder more DI.
     $container = new ContainerBuilder();
     $mock_string_translation = $this->createMock(TranslationManager::class);
