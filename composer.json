@@ -1,9 +1,9 @@
 {
-    "name": "drupal/commerce_easy",
+    "name": "ramlev/commerce_easy",
     "type": "drupal-module",
     "description": "Provides an Easy payment gateway integration.",
     "require": {
-        "drupal/commerce": "~2.25",
+        "drupal/commerce": "~2.25 || ^3.0",
         "drupal/commerce_payment_extra": "^1.0@beta"
     },
     "require-dev": {
